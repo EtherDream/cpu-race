@@ -1,73 +1,309 @@
 <!doctype html>
 <html lang="en">
 <head>
-<title>CPU Race</title>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Measure your CPU's effective clock, then race the global leaderboard">
+<title>CPU Race</title>
 <style>
+  :root {
+    --bg: #ffffff;
+    --fg: #141414;
+    --muted: #6b6b6b;
+    --faint: #9a9a9a;
+    --line: #e4e4e4;
+    --rule: #141414;
+    --you: #7a5c00;
+    --you-bg: #fdf5dd;
+    --warn: #a8001c;
+    --warn-bg: #fff4f4;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e10;
+      --fg: #e8e8e8;
+      --muted: #8e8e8e;
+      --faint: #6a6a6a;
+      --line: #24242a;
+      --rule: #4a4a52;
+      --you: #e3b951;
+      --you-bg: #221d0e;
+      --warn: #ff8f8f;
+      --warn-bg: #2a1416;
+      color-scheme: dark;
+    }
+  }
+  * {
+    box-sizing: border-box;
+  }
+  [hidden] {
+    display: none !important;
+  }
   body {
-    font-family: monospace;
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 46em;
+    margin: 0 auto;
+    padding: 2.5em 1.25em 3em;
+  }
+
+  .label {
+    color: var(--faint);
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-bottom: .7em;
+  }
+
+  .hero {
+    margin-bottom: 1.5em;
+  }
+  .readout {
+    display: flex;
+    align-items: baseline;
+    gap: .18em;
+    line-height: 1;
+  }
+  .readout .num {
+    font-size: clamp(44px, 15vw, 68px);
+    font-weight: 700;
+    letter-spacing: -.02em;
+  }
+  .readout .unit {
+    font-size: clamp(15px, 4vw, 20px);
+    color: var(--muted);
+    font-weight: 400;
+    margin-left: .5em;
+  }
+
+  progress {
+    appearance: none;
+    -webkit-appearance: none;
+    display: block;
+    width: 100%;
+    height: 2px;
+    border: 0;
+    margin: 1.4em 0 1em;
+    background: var(--line);
+  }
+  progress::-webkit-progress-bar {
+    background: var(--line);
+  }
+  progress::-webkit-progress-value {
+    background: var(--fg);
+  }
+  progress::-moz-progress-bar {
+    background: var(--fg);
+  }
+
+  .state {
+    display: flex;
+    align-items: baseline;
+    gap: .6em;
+    color: var(--muted);
+  }
+  .badge {
+    display: inline-block;
+    background: var(--you);
+    color: var(--bg);
+    font-weight: 700;
+    padding: .1em .5em;
+    letter-spacing: .04em;
+  }
+
+  .warn {
+    border-left: 3px solid var(--warn);
+    background: var(--warn-bg);
+    color: var(--warn);
+    padding: .65em .85em;
+    margin: 1.25em 0;
+  }
+
+  .profile {
+    margin: 2.25em 0;
+  }
+  .profile svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .profile polyline {
+    stroke: var(--fg);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+  .profile .dot-a {
+    fill: var(--faint);
+  }
+  .profile .dot-b {
+    fill: var(--fg);
+  }
+  #chartTip {
+    position: fixed;
+    z-index: 1;
+    padding: .2em .5em;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .board {
+    margin-top: 2.5em;
+  }
+  .board-scroll {
+    overflow-x: auto;
   }
   table {
+    width: 100%;
     border-collapse: collapse;
-    margin: 0.5em 0;
+    font-size: 12.5px;
   }
-  #progressBar {
-    width: 20em;
+  th {
+    font-weight: 400;
+    color: var(--muted);
+    text-align: right;
+    padding: .45em .6em;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
   }
-  table, th, td {
-    text-align: center;
-    border: 1px solid #ccc;
-    padding: 0.3em 0.6em;
+  td {
+    text-align: right;
+    padding: .42em .6em;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
-  .highlight {
-    font-weight: bold;
-    background: #eee;
+  th:first-child, td:first-child {
+    text-align: left;
+    width: 1%;
+    color: var(--faint);
   }
-  #txtSpeed {
-    font-size: 55px;
+  th:nth-child(3), td:nth-child(3) {
+    padding-right: 1.4em;
   }
-  #visibilityWarn {
-    color: #c00;
-    margin: 0.5em 0;
+  th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) {
+    text-align: left;
   }
+  tbody tr:hover td {
+    background: color-mix(in srgb, var(--fg) 4%, transparent);
+  }
+  tr.highlight td {
+    background: var(--you-bg);
+    color: var(--you);
+    font-weight: 700;
+    border-bottom-color: var(--you-bg);
+  }
+  tr.highlight td:first-child {
+    box-shadow: inset 3px 0 0 var(--you);
+    color: var(--you);
+  }
+
+  @media (max-width: 560px) {
+    main {
+      padding: 1.75em 1em 2.5em;
+    }
+    th:nth-child(5), td:nth-child(5) {
+      display: none;
+    }
+    th, td {
+      padding: .42em .35em;
+    }
+    table {
+      font-size: 12px;
+    }
+  }
+
+  footer {
+    margin-top: 3em;
+    padding-top: 1.25em;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+  }
+  footer a {
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+  }
+  footer a:hover {
+    color: var(--fg);
+    border-bottom-color: var(--fg);
+  }
+
 </style>
 </head>
 <body>
-<div id="txtSpeed">0 GHz</div>
-<div>
-  <progress id="progressBar"></progress>
-</div>
-<div>
-  <span id="txtState">...</span>
-</div>
-<div id="visibilityWarn" hidden>
-  Tab switching detected! Measured values may be lower than reality. Reload to try again.
-</div>
-<table>
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>Total time</th>
-      <th>Est. clock</th>
-      <th>Location</th>
-      <th>Date</th>
-    </tr>
-  </thead>
-  <tbody id="tableRank"></tbody>
-</table>
+<main>
+  <section class="hero">
+    <div class="label">Effective clock</div>
+    <div class="readout">
+      <span class="num" id="txtSpeed">0</span><span class="unit">GHz</span>
+    </div>
+    <progress id="progressBar" max="1" value="0"></progress>
+    <div class="state">
+      <span class="badge" id="badge" hidden></span>
+      <span id="txtState">Warming up...</span>
+    </div>
+  </section>
+
+  <div class="warn" id="visibilityWarn" hidden>
+    Tab switching detected! Measured values may be lower than reality. Reload to try again.
+  </div>
+
+  <section class="profile" id="profileSec" hidden>
+    <div class="label">Run profile &middot; 20 chunks<span id="rangeTxt"></span></div>
+    <svg id="chart" viewBox="0 0 240 46" preserveAspectRatio="none" role="img"
+         aria-label="Equivalent clock across the 20 timed chunks"></svg>
+    <div id="chartTip" hidden></div>
+  </section>
+
+  <section class="board">
+    <div class="label">Leaderboard</div>
+    <div class="board-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Total time</th>
+            <th>Est. clock</th>
+            <th>Location</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="tableRank"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/EtherDream/cpu-race">GitHub</a>
+  </footer>
+</main>
+
 <script>
   const TOTAL_ITERS = 2.5e9
   const ITERS_PER_CALL = TOTAL_ITERS / 20
+  const CYCLES_PER_ITER = 40
+
+  const EDGE_URL = 'wss://cpu-race-cfworker.etherdream.com/v1'
+  // const EDGE_URL = 'ws://localhost:8787/v1'
 
   const workerEnv = () => {
     const wasmB64 = 'AGFzbQEAAAABCQFgA35+fwJ+fgMCAQAHCQEFc29sdmUAAArAAQG9AQADQCAAIAGFQpXfi/S9qImaUX5CEYkhACABIACFQqOpz6HtxemZywB+QhOJIQEgACABhULTrdSykoW1tJ5/fkIViSEAIAEgAIVCpfGx08q545otfkIXiSEBIAAgAYVCldPH3rXyqdJGfkIZiSEAIAEgAIVCs+uwxNyUtJJLfkIbiSEBIAAgAYVCxc/ZsvHluuonfkIdiSEAIAEgAIVCrf7V5NSF/ajYAH5CH4khASACQQFrIgINAAsgACABCw=='
     const wasmBin = Uint8Array.from(atob(wasmB64), c => c.charCodeAt(0))
-    const wasmMod = new WebAssembly.Module(wasmBin)
-    const wasmObj = new WebAssembly.Instance(wasmMod)
-    const {solve} = wasmObj.exports
+    const {solve} = new WebAssembly.Instance(new WebAssembly.Module(wasmBin)).exports
 
     onmessage = (e) => {
       let [a, b] = e.data
@@ -95,121 +331,63 @@
     const ITERS_PER_CALL = ${ITERS_PER_CALL}
     ;(${workerEnv})()
   `
-  const workerBlob = new Blob([workerCode])
-  const workerUrl = URL.createObjectURL(workerBlob)
-  const worker = new Worker(workerUrl)
+  const worker = new Worker(
+    URL.createObjectURL(new Blob([workerCode]))
+  )
+  const toGhz = (iter, ms) => iter * CYCLES_PER_ITER / ms / 1e6
 
-
-  function formatSpeed(iter, timeMs) {
-    const CYCLES_PER_ITER = 40
-    return (iter * CYCLES_PER_ITER / timeMs / 1e6).toFixed(2) + ' GHz'
-  }
-
-  worker.onmessage = (e) => {
-    const msg = e.data
-    if (typeof msg === 'number') {
-      const timeMs = msg
-      // console.log('time:', timeMs)
-      txtSpeed.textContent = formatSpeed(ITERS_PER_CALL, timeMs)
-      progressBar.value += ITERS_PER_CALL
-    } else {
-      if (msg.type === 'ready') {
-        connect()
-      } else {
-        console.timeEnd('solve')
-        submit(msg.a, msg.b)
-      }
-    }
-  }
-
-  // const EDGE_URL = 'ws://localhost:8787/v1'
-  const EDGE_URL = 'wss://cpu-race-cfworker.etherdream.com/v1'
-
+  const chunks = []
   let msgId = 0
   let ws
   let rtt
 
-  async function submit(a, b) {
-    setState('Submitting...')
-    console.log('answer:', a, b)
-    document.onvisibilitychange = null
+  let readyTimer = setTimeout(() => {
+    setState('Worker failed to start')
+  }, 5000)
 
-    const answer = BigUint64Array.of(a, b)
-    ws.send(answer)
-    rtt = Date.now()
-  }
-
-  function start(ques) {
-    worker.postMessage(ques)
-    console.log('question:', ...ques)
-    console.time('solve')
-
-    document.onvisibilitychange = () => {
-      visibilityWarn.hidden = false
-    }
-    progressBar.max = TOTAL_ITERS
-    progressBar.value = 0
-    setState('Measuring CPU speed...')
-  }
-
-  function complete(json) {
-    if (json.error) {
-      setState(json.error)
-      return
-    }
-    const prefix = `Your time: ${json.duration} ms (incl. ~${rtt} ms RTT)`
-
-    if (json.rank === 0) {
-      setState(`${prefix}, not ranked.`)
-      return
-    }
-    setState(`${prefix}, ranked #${json.rankIndex}!`)
-    updateRankTable(json.rank, json.rankIndex)
-  }
-
-  function updateRankTable(rank, rankIndex) {
-    tableRank.innerHTML = ''
-
-    rank.forEach((item, index) => {
-      const row = document.createElement('tr')
-
-      const speed = formatSpeed(TOTAL_ITERS, item.duration)
-      const duration = item.duration + ' ms'
-      const date = new Date(item.date).toLocaleString()
-
-      for (const v of [index + 1, duration, speed, item.geo, date]) {
-        const col = document.createElement('td')
-        col.textContent = v
-        row.appendChild(col)
-      }
-      tableRank.appendChild(row)
-    })
-    if (rankIndex) {
-      tableRank.children[rankIndex - 1].classList.add('highlight')
-    }
+  // covers what an in-worker try/catch never can: parse errors (BigInt SyntaxError),
+  // wasm CompileError at top level, and crashes mid-run inside onmessage
+  worker.onerror = (e) => {
+    clearTimeout(readyTimer)
+    setState('Worker failed: ' + e.message)
   }
 
   function setState(text) {
     txtState.textContent = text
   }
 
+  worker.onmessage = (e) => {
+    const msg = e.data
+
+    if (typeof msg === 'number') {
+      txtSpeed.textContent = toGhz(ITERS_PER_CALL, msg).toFixed(2)
+      progressBar.value += ITERS_PER_CALL
+      chunks.push(msg)
+      return
+    }
+    switch (msg.type) {
+    case 'ready':
+      clearTimeout(readyTimer)
+      connect()
+      break
+    case 'done':
+      submit(msg.a, msg.b)
+      break
+    }
+  }
+
   function connect() {
     setState('Connecting to server...')
     ws = new WebSocket(EDGE_URL)
-
-    ws.onopen = () => {
-      console.log('WebSocket connection established.')
-    }
-    ws.onclose = () => {
-      console.log('WebSocket connection closed.')
-    }
+    ws.binaryType = 'arraybuffer'
+    ws.onclose = () => {}
     ws.onerror = () => {
-      console.log('WebSocket connection error.')
       setState('Connection failed, reload to retry')
     }
     ws.onmessage = (e) => {
       const msg = e.data
 
+      // wire order: 0 question (binary) / 1 leaderboard / 2 RTT ack / 3 result or error
       switch (msgId++) {
       case 0:
         start(new BigUint64Array(msg))
@@ -228,14 +406,111 @@
         break
       }
     }
-    ws.binaryType = 'arraybuffer' 
   }
 
-  navigator.wakeLock?.request('screen')
-    .catch(() => {})
+  function start(ques) {
+    worker.postMessage(ques)
+    chunks.length = 0
 
+    document.onvisibilitychange = () => {
+      visibilityWarn.hidden = false
+    }
+    progressBar.max = TOTAL_ITERS
+    progressBar.value = 0
+    setState('Measuring CPU speed...')
+  }
+
+  function submit(a, b) {
+    ws.send(BigUint64Array.of(a, b))
+    setState('Submitting...')
+    document.onvisibilitychange = null
+    rtt = Date.now()
+  }
+
+  function complete(json) {
+    drawProfile()
+    if (json.error) {
+      setState(json.error)
+      return
+    }
+    const prefix = `${json.duration} ms (incl. ${rtt} ms RTT)`
+    if (json.rank === 0) {
+      setState(prefix + ' — not ranked')
+      return
+    }
+    badge.textContent = '#' + json.rankIndex
+    badge.hidden = false
+    setState(prefix)
+    updateRankTable(json.rank, json.rankIndex)
+  }
+
+  function updateRankTable(rank, rankIndex = 0) {
+    tableRank.innerHTML = ''
+
+    rank.forEach((item, index) => {
+      const row = document.createElement('tr')
+      if (index + 1 === rankIndex) {
+        row.className = 'highlight'
+      }
+      const ghz = toGhz(TOTAL_ITERS, item.duration).toFixed(2) + ' GHz'
+      const duration = item.duration + ' ms'
+      const date = new Date(item.date)
+      const dateShort = date.toLocaleDateString()
+
+      for (const v of [index + 1, duration, ghz, item.geo, dateShort]) {
+        const td = document.createElement('td')
+        td.textContent = v
+        row.appendChild(td)
+      }
+      row.lastChild.title = date.toLocaleString()
+      tableRank.appendChild(row)
+    })
+  }
+
+  // drawn once, after submit: the y-axis is zoomed to the data range, so the range is
+  // printed in the section label. The scale is padded so no point touches the plot
+  // edges — without that, the slowest chunk sits on the bottom edge and reads as clipping.
+  function drawProfile() {
+    if (chunks.length < 2) {
+      return
+    }
+    const ghz = chunks.map(ms => toGhz(ITERS_PER_CALL, ms))
+    const lo = Math.min(...ghz), hi = Math.max(...ghz)
+    const span = (hi - lo) || 1
+    const pad = span * 0.18
+
+    const W = 240, H = 46, P = 3
+    const x = i => P + i * (W - 2 * P) / (ghz.length - 1)
+    const y = v => H - P - (v - lo + pad) / (span + 2 * pad) * (H - 2 * P)
+
+    chart.innerHTML =
+      `<polyline points="${ghz.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none"/>` +
+      `<circle class="dot-a" cx="${x(0).toFixed(1)}" cy="${y(ghz[0]).toFixed(1)}" r="1.6"/>` +
+      `<circle class="dot-b" cx="${x(ghz.length - 1).toFixed(1)}" cy="${y(ghz[ghz.length - 1]).toFixed(1)}" r="1.6"/>`
+
+    rangeTxt.textContent = ' · ' + lo.toFixed(2) + '–' + hi.toFixed(2) + ' GHz'
+
+    // Cursor-following readout. The whole plot is the hit area, so there are no
+    // per-point targets to aim at. Attached after submit, so the timing window
+    // never sees it. 160 is the tooltip's max width, used to keep it in view.
+    chart.onmousemove = (e) => {
+      const rect = chart.getBoundingClientRect()
+      const n = chunks.length - 1
+      const i = Math.min(n, Math.max(0, Math.round((e.clientX - rect.left) / rect.width * n)))
+      chartTip.textContent = `chunk ${i + 1} · ${toGhz(ITERS_PER_CALL, chunks[i]).toFixed(2)} GHz`
+      chartTip.style.left = Math.min(e.clientX + 12, innerWidth - 160) + 'px'
+      chartTip.style.top = (e.clientY + 12) + 'px'
+      chartTip.hidden = false
+    }
+    chart.onmouseleave = () => {
+      chartTip.hidden = true
+    }
+
+    profileSec.hidden = false
+  }
+
+  navigator.wakeLock?.request('screen').catch(() => {})
   console.warn('DevTools open: measured values may be lower than reality')
 </script>
-<a href="https://github.com/EtherDream/cpu-race/" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
 </body>
 </html>
